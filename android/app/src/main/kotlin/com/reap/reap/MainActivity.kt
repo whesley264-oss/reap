@@ -237,18 +237,14 @@ class MainActivity : FlutterActivity() {
             return listOf(mapOf("category" to "permission_required", "message" to "Permissão necessária", "size" to 0L, "count" to 0, "percentage" to 0.0))
         }
 
-        val baseDir = Environment.getExternalStorageDirectory()
-        
         // Define categories with their directories
         val categoryDirs = mapOf(
-            "videos" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), 
-                             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_VIDEO)),
+            "videos" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)),
             "images" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), 
                               Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)),
             "downloads" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)),
             "audio" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC), 
-                             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS),
-                             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_NOTIFICATIONS)),
+                             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS)),
             "documents" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)),
             "alarms" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_ALARMS)),
             "ringtones" to listOf(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_RINGTONES))
