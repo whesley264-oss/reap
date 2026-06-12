@@ -1,0 +1,58 @@
+name: Android Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: ${{ runner.os }}-flutter-${{ hashFiles('**/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reap-debug-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build/app/intermediates/
+            ~/.gradle/caches/
+          retention-days: 1
