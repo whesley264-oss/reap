@@ -56,4 +56,54 @@ class NativeService {
     }
     return [];
   }
+
+  Future<int> getAndroidVersion() async {
+    try {
+      final result = await _channel.invokeMethod('getAndroidVersion');
+      return result as int? ?? 0;
+    } on PlatformException {
+      return 0;
+    }
+  }
+
+  Future<bool> hasStoragePermission() async {
+    try {
+      final result = await _channel.invokeMethod('hasStoragePermission');
+      return result as bool? ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  Future<void> requestStoragePermission() async {
+    try {
+      await _channel.invokeMethod('requestStoragePermission');
+    } on PlatformException catch (e) {
+      print('Failed to request storage permission: ${e.message}');
+    }
+  }
+
+  Future<void> openAppSettings(String packageName) async {
+    try {
+      await _channel.invokeMethod('openAppSettings', {'packageName': packageName});
+    } on PlatformException catch (e) {
+      print('Failed to open app settings: ${e.message}');
+    }
+  }
+
+  Future<void> openFileLocation(String path) async {
+    try {
+      await _channel.invokeMethod('openFileLocation', {'path': path});
+    } on PlatformException catch (e) {
+      print('Failed to open file location: ${e.message}');
+    }
+  }
+
+  Future<void> openDownloads() async {
+    try {
+      await _channel.invokeMethod('openDownloads');
+    } on PlatformException catch (e) {
+      print('Failed to open downloads: ${e.message}');
+    }
+  }
 }

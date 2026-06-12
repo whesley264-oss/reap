@@ -3,27 +3,38 @@ class AppInfo {
   final String name;
   final int size;
   final DateTime? installDate;
-  final DateTime? lastUse;
-  final int usageCount;
+  final DateTime? lastUpdate;
+  final String version;
+  final int versionCode;
+  final bool isSystemApp;
 
   const AppInfo({
     required this.packageName,
     required this.name,
     required this.size,
     this.installDate,
-    this.lastUse,
-    this.usageCount = 0,
+    this.lastUpdate,
+    this.version = 'Unknown',
+    this.versionCode = 0,
+    this.isSystemApp = false,
   });
 
   bool get isUnused {
-    if (lastUse == null) return true;
-    final daysSinceUse = DateTime.now().difference(lastUse!).inDays;
-    return daysSinceUse > 30;
+    if (lastUpdate == null) return false;
+    final daysSinceUpdate = DateTime.now().difference(lastUpdate!).inDays;
+    return daysSinceUpdate > 90;
   }
 
   bool get isLarge {
     const largeThreshold = 500 * 1024 * 1024; // 500 MB
     return size > largeThreshold;
+  }
+
+  String get formattedSize {
+    if (size < 1024) return '$size B';
+    if (size < 1024 * 1024) return '${(size / 1024).toStringAsFixed(1)} KB';
+    if (size < 1024 * 1024 * 1024) return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(size / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
   factory AppInfo.empty() => const AppInfo(
@@ -46,8 +57,10 @@ class AppInfo {
       name: map['name'] ?? 'Unknown',
       size: map['size'] ?? 0,
       installDate: parseDate(map['installDate']),
-      lastUse: parseDate(map['lastUse']),
-      usageCount: map['usageCount'] ?? 0,
+      lastUpdate: parseDate(map['lastUpdate']),
+      version: map['version'] ?? 'Unknown',
+      versionCode: map['versionCode'] ?? 0,
+      isSystemApp: map['isSystemApp'] ?? false,
     );
   }
 
@@ -56,7 +69,9 @@ class AppInfo {
         'name': name,
         'size': size,
         'installDate': installDate?.millisecondsSinceEpoch,
-        'lastUse': lastUse?.millisecondsSinceEpoch,
-        'usageCount': usageCount,
+        'lastUpdate': lastUpdate?.millisecondsSinceEpoch,
+        'version': version,
+        'versionCode': versionCode,
+        'isSystemApp': isSystemApp,
       };
 }
