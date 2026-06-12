@@ -83,8 +83,8 @@ class _AppsScreenState extends ConsumerState<AppsScreen> {
         break;
       case AppSortOption.lastUse:
         sorted.sort((a, b) {
-          final aDate = a.lastUse ?? DateTime(1970);
-          final bDate = b.lastUse ?? DateTime(1970);
+          final aDate = a.lastUpdate ?? DateTime(1970);
+          final bDate = b.lastUpdate ?? DateTime(1970);
           return bDate.compareTo(aDate);
         });
         break;
