@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.os.SystemClock
-import android.os.storage.StorageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -87,19 +86,18 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun getRealStorageInfo(): Map<String, Any> {
-        val storageManager = getSystemService(Context.STORAGE_SERVICE) as StorageManager
-        val uuid = storageManager.getUuidForPath(Environment.getExternalStorageDirectory())
-
         var totalBytes: Long = 0
         var freeBytes: Long = 0
 
         try {
-            val storageStats = storageManager.getStorageStats(uuid)
-            totalBytes = storageStats.totalBytes
-            freeBytes = storageStats.freeBytes
+            val path = Environment.getExternalStorageDirectory()
+            val stat = StatFs(path.path)
+            totalBytes = stat.blockSizeLong * stat.blockCountLong
+            freeBytes = stat.blockSizeLong * stat.availableBlocksLong
         } catch (e: Exception) {
-            // Fallback to StatFs
-            val stat = StatFs(Environment.getExternalStorageDirectory().path)
+            // Fallback - use internal storage
+            val path = Environment.getDataDirectory()
+            val stat = StatFs(path.path)
             totalBytes = stat.blockSizeLong * stat.blockCountLong
             freeBytes = stat.blockSizeLong * stat.availableBlocksLong
         }
@@ -167,32 +165,30 @@ class MainActivity : FlutterActivity() {
 
         // Estimate battery health based on actual battery properties
         // Note: Android doesn't expose true battery health to apps without special permissions
-        // We can only estimate based on charging behavior and battery specs
-        val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        var estimatedHealth = 80 // Default estimate
+        // We can only estimate based on temperature and general behavior
+        var estimatedHealth = 85 // Default estimate
         var healthConfidence = "low"
 
-        try {
-            // Try to get battery capacity (API 31+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val chargeCounter = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
-                val capacity = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_BATTERY_CAPACITY)
-                if (capacity > 0 && chargeCounter > 0) {
-                    val currentCapacity = (chargeCounter / 1000) // Convert from nAh to mAh
-                    val healthPercent = (currentCapacity * 100 / capacity)
-                    estimatedHealth = healthPercent.coerceIn(50, 100)
+        // Adjust based on temperature - high temp degrades battery
+        if (temperature > 0) {
+            when {
+                temperature < 30 -> {
+                    estimatedHealth = 90
+                    healthConfidence = "high"
+                }
+                temperature < 40 -> {
+                    estimatedHealth = 85
+                    healthConfidence = "high"
+                }
+                temperature < 45 -> {
+                    estimatedHealth = 75
+                    healthConfidence = "medium"
+                }
+                else -> {
+                    estimatedHealth = 65
                     healthConfidence = "medium"
                 }
             }
-        } catch (e: Exception) {
-            // Use default estimates
-        }
-
-        // Adjust confidence based on available data
-        healthConfidence = when {
-            temperature > 0 && temperature < 45 -> "high"
-            temperature > 0 -> "medium"
-            else -> "low"
         }
 
         return mapOf(
