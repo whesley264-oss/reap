@@ -1,16 +1,21 @@
 package com.reap.reap
 
+import android.Manifest
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.content.pm.PackageManager.NameNotFoundException
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.os.SystemClock
+import android.os.storage.StorageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -18,6 +23,7 @@ import java.io.File
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.reap/native"
+    private val STORAGE_PERMISSION_CODE = 1001
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -28,9 +34,81 @@ class MainActivity : FlutterActivity() {
                 "getBatteryInfo" -> result.success(getBatteryInfo())
                 "getStorageAnalysis" -> result.success(getStorageAnalysis())
                 "getInstalledApps" -> result.success(getInstalledApps())
+                "getAndroidVersion" -> result.success(Build.VERSION.SDK_INT)
+                "hasStoragePermission" -> result.success(checkStoragePermission())
+                "requestStoragePermission" -> {
+                    requestStoragePermission()
+                    result.success(true)
+                }
+                "getRealStorageInfo" -> result.success(getRealStorageInfo())
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun checkStoragePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Environment.isExternalStorageManager()
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_MEDIA_VIDEO
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+                intent.data = android.net.Uri.parse("package:$packageName")
+                startActivityForResult(intent, STORAGE_PERMISSION_CODE)
+            } catch (e: Exception) {
+                val intent = Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                startActivityForResult(intent, STORAGE_PERMISSION_CODE)
+            }
+        } else {
+            val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                arrayOf(
+                    Manifest.permission.READ_MEDIA_VIDEO,
+                    Manifest.permission.READ_MEDIA_IMAGES,
+                    Manifest.permission.READ_MEDIA_AUDIO
+                )
+            } else {
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+            ActivityCompat.requestPermissions(this, permissions, STORAGE_PERMISSION_CODE)
+        }
+    }
+
+    private fun getRealStorageInfo(): Map<String, Any> {
+        val storageManager = getSystemService(Context.STORAGE_SERVICE) as StorageManager
+        val uuid = storageManager.getUuidForPath(Environment.getExternalStorageDirectory())
+
+        var totalBytes: Long = 0
+        var freeBytes: Long = 0
+
+        try {
+            val storageStats = storageManager.getStorageStats(uuid)
+            totalBytes = storageStats.totalBytes
+            freeBytes = storageStats.freeBytes
+        } catch (e: Exception) {
+            // Fallback to StatFs
+            val stat = StatFs(Environment.getExternalStorageDirectory().path)
+            totalBytes = stat.blockSizeLong * stat.blockCountLong
+            freeBytes = stat.blockSizeLong * stat.availableBlocksLong
+        }
+
+        return mapOf(
+            "totalStorage" to totalBytes,
+            "freeStorage" to freeBytes,
+            "usedStorage" to (totalBytes - freeBytes)
+        )
     }
 
     private fun getDeviceInfo(): Map<String, Any> {
@@ -42,9 +120,10 @@ class MainActivity : FlutterActivity() {
         val freeRam = memInfo.availMem
         val uptime = SystemClock.elapsedRealtime() / 1000
 
-        val stat = StatFs(Environment.getDataDirectory().path)
-        val totalStorage = stat.blockSizeLong * stat.blockCountLong
-        val freeStorage = stat.blockSizeLong * stat.availableBlocksLong
+        // Get real storage info
+        val storageInfo = getRealStorageInfo()
+        val totalStorage = storageInfo["totalStorage"] as Long
+        val freeStorage = storageInfo["freeStorage"] as Long
 
         val cpuCores = Runtime.getRuntime().availableProcessors()
 
@@ -59,7 +138,8 @@ class MainActivity : FlutterActivity() {
             "freeStorage" to freeStorage,
             "uptime" to uptime,
             "cpuArchitecture" to (Build.SUPPORTED_ABIS.firstOrNull() as? String ?: "Unknown"),
-            "cpuCores" to cpuCores
+            "cpuCores" to cpuCores,
+            "hasStoragePermission" to checkStoragePermission()
         )
     }
 
@@ -85,11 +165,33 @@ class MainActivity : FlutterActivity() {
             else -> "unknown"
         }
 
-        // Estimate health based on charging patterns (simplified)
-        val estimatedHealth = 85 + (Math.random() * 10).toInt()
-        val healthConfidence = when {
-            batteryPct > 20 -> "high"
-            batteryPct > 10 -> "medium"
+        // Estimate battery health based on actual battery properties
+        // Note: Android doesn't expose true battery health to apps without special permissions
+        // We can only estimate based on charging behavior and battery specs
+        val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        var estimatedHealth = 80 // Default estimate
+        var healthConfidence = "low"
+
+        try {
+            // Try to get battery capacity (API 31+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val chargeCounter = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+                val capacity = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_BATTERY_CAPACITY)
+                if (capacity > 0 && chargeCounter > 0) {
+                    val currentCapacity = (chargeCounter / 1000) // Convert from nAh to mAh
+                    val healthPercent = (currentCapacity * 100 / capacity)
+                    estimatedHealth = healthPercent.coerceIn(50, 100)
+                    healthConfidence = "medium"
+                }
+            }
+        } catch (e: Exception) {
+            // Use default estimates
+        }
+
+        // Adjust confidence based on available data
+        healthConfidence = when {
+            temperature > 0 && temperature < 45 -> "high"
+            temperature > 0 -> "medium"
             else -> "low"
         }
 
@@ -100,12 +202,26 @@ class MainActivity : FlutterActivity() {
             "voltage" to voltage,
             "technology" to technology,
             "estimatedHealth" to estimatedHealth,
-            "healthConfidence" to healthConfidence
+            "healthConfidence" to healthConfidence,
+            "isCharging" to (statusInt == BatteryManager.BATTERY_STATUS_CHARGING)
         )
     }
 
     private fun getStorageAnalysis(): List<Map<String, Any>> {
         val categories = mutableListOf<Map<String, Any>>()
+
+        // Check if we have permission first
+        if (!checkStoragePermission()) {
+            return listOf(
+                mapOf(
+                    "category" to "permission_required",
+                    "message" to "Permissão de armazenamento necessária",
+                    "size" to 0L,
+                    "count" to 0,
+                    "percentage" to 0.0
+                )
+            )
+        }
 
         val dcimDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM)
         val picturesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
@@ -113,12 +229,27 @@ class MainActivity : FlutterActivity() {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         val musicDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC)
         val documentsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
+        val podcastDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PODCASTS)
+        val alarmsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_ALARMS)
+        val downloadsFolder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
 
         categories.add(analyzeDirectory("videos", videosDir))
         categories.add(analyzeDirectory("images", dcimDir, picturesDir))
-        categories.add(analyzeDirectory("downloads", downloadsDir))
-        categories.add(analyzeDirectory("audio", musicDir))
+        categories.add(analyzeDirectory("downloads", downloadsDir, downloadsFolder))
+        categories.add(analyzeDirectory("audio", musicDir, podcastDir))
         categories.add(analyzeDirectory("documents", documentsDir))
+        categories.add(analyzeDirectory("alarms", alarmsDir))
+
+        // Calculate total size and percentages
+        val totalSize = categories.filter { it["category"] != "permission_required" }
+            .sumOf { it["size"] as Long }
+
+        categories.forEach { category ->
+            if (totalSize > 0) {
+                val percentage = ((category["size"] as Long) * 100.0 / totalSize)
+                (category as MutableMap)["percentage"] = percentage
+            }
+        }
 
         return categories
     }
@@ -128,17 +259,25 @@ class MainActivity : FlutterActivity() {
         var count = 0
 
         for (dir in dirs) {
-            if (dir.exists() && dir.isDirectory) {
-                dir.walkTopDown().forEach { file ->
-                    if (file.isFile) {
-                        totalSize += file.length()
-                        count++
+            try {
+                if (dir.exists() && dir.isDirectory && dir.canRead()) {
+                    dir.walkTopDown().forEach { file ->
+                        if (file.isFile && !file.name.startsWith(".")) {
+                            try {
+                                totalSize += file.length()
+                                count++
+                            } catch (e: Exception) {
+                                // Skip files we can't read
+                            }
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                // Skip directories we can't access
             }
         }
 
-        return mapOf(
+        return mutableMapOf(
             "category" to category,
             "size" to totalSize,
             "count" to count,
@@ -152,25 +291,66 @@ class MainActivity : FlutterActivity() {
 
         return packages
             .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
-            .map { appInfo ->
-                val packageName = appInfo.packageName
-                val appName = pm.getApplicationLabel(appInfo).toString()
-                val installTime = packageManager.getPackageInfo(packageName, 0).firstInstallTime
-                val lastUpdateTime = packageManager.getPackageInfo(packageName, 0).lastUpdateTime
+            .mapNotNull { appInfo ->
+                try {
+                    val packageName = appInfo.packageName
+                    val appName = pm.getApplicationLabel(appInfo).toString()
+                    val installTime = packageManager.getPackageInfo(packageName, 0).firstInstallTime
+                    val lastUpdateTime = packageManager.getPackageInfo(packageName, 0).lastUpdateTime
 
-                // Get app size (simplified)
-                val sourceDir = appInfo.sourceDir
-                val size = File(sourceDir).length()
+                    // Get app size properly
+                    val size = getAppSize(appInfo)
 
-                mapOf(
-                    "packageName" to packageName,
-                    "name" to appName,
-                    "size" to size,
-                    "installDate" to installTime,
-                    "lastUse" to lastUpdateTime,
-                    "usageCount" to 0
-                )
+                    mapOf(
+                        "packageName" to packageName,
+                        "name" to appName,
+                        "size" to size,
+                        "installDate" to installTime,
+                        "lastUpdate" to lastUpdateTime,
+                        "version" to getAppVersion(packageName),
+                        "isSystemApp" to false
+                    )
+                } catch (e: Exception) {
+                    null
+                }
             }
-            .sortedByDescending { it["size"] as Long }
+            .sortedByDescending { (it["size"] as? Long) ?: 0L }
+    }
+
+    private fun getAppSize(appInfo: ApplicationInfo): Long {
+        var size: Long = 0
+        try {
+            // Primary source APK
+            size += File(appInfo.sourceDir).length()
+
+            // Split APKs (if any)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                appInfo.splitSourceDirs?.forEach { path ->
+                    size += File(path).length()
+                }
+            }
+
+            // Native libraries size (approximation)
+            if (appInfo.nativeLibraryDir != null) {
+                val nativeDir = File(appInfo.nativeLibraryDir)
+                if (nativeDir.exists()) {
+                    nativeDir.listFiles()?.forEach { file ->
+                        size += file.length()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Fallback
+        }
+        return size
+    }
+
+    private fun getAppVersion(packageName: String): String {
+        return try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            pInfo.versionName ?: "Unknown"
+        } catch (e: NameNotFoundException) {
+            "Unknown"
+        }
     }
 }

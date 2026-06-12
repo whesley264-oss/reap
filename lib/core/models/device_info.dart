@@ -10,6 +10,7 @@ class DeviceInfo {
   final int uptime;
   final String cpuArchitecture;
   final int cpuCores;
+  final bool hasStoragePermission;
 
   const DeviceInfo({
     required this.model,
@@ -23,10 +24,11 @@ class DeviceInfo {
     required this.uptime,
     required this.cpuArchitecture,
     required this.cpuCores,
+    this.hasStoragePermission = false,
   });
 
-  double get ramUsagePercent => ((totalRam - freeRam) / totalRam) * 100;
-  double get storageUsagePercent => ((totalStorage - freeStorage) / totalStorage) * 100;
+  double get ramUsagePercent => totalRam > 0 ? ((totalRam - freeRam) / totalRam) * 100 : 0;
+  double get storageUsagePercent => totalStorage > 0 ? ((totalStorage - freeStorage) / totalStorage) * 100 : 0;
 
   factory DeviceInfo.empty() => const DeviceInfo(
         model: 'Unknown',
@@ -40,6 +42,7 @@ class DeviceInfo {
         uptime: 0,
         cpuArchitecture: 'Unknown',
         cpuCores: 0,
+        hasStoragePermission: false,
       );
 
   factory DeviceInfo.fromMap(Map<String, dynamic> map) => DeviceInfo(
@@ -54,6 +57,7 @@ class DeviceInfo {
         uptime: map['uptime'] ?? 0,
         cpuArchitecture: map['cpuArchitecture'] ?? 'Unknown',
         cpuCores: map['cpuCores'] ?? 0,
+        hasStoragePermission: map['hasStoragePermission'] ?? false,
       );
 
   Map<String, dynamic> toMap() => {
@@ -68,5 +72,6 @@ class DeviceInfo {
         'uptime': uptime,
         'cpuArchitecture': cpuArchitecture,
         'cpuCores': cpuCores,
+        'hasStoragePermission': hasStoragePermission,
       };
 }

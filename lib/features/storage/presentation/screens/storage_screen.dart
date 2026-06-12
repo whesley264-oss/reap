@@ -4,6 +4,7 @@ import '../../../../core/models/models.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/format_utils.dart';
 import '../../../../shared/widgets/storage_indicator.dart';
+import '../../../../shared/widgets/permission_handler_widget.dart';
 import '../../../dashboard/providers/device_provider.dart';
 
 class StorageScreen extends ConsumerWidget {
@@ -16,21 +17,24 @@ class StorageScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Armazenamento')),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(deviceInfoProvider);
-          ref.invalidate(storageAnalysisProvider);
-        },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildStorageOverview(context, deviceAsync),
-              const SizedBox(height: 16),
-              _buildCategoriesCard(context, storageAsync),
-            ],
+      body: PermissionHandlerWidget(
+        permissionType: 'storage',
+        child: RefreshIndicator(
+          onRefresh: () async {
+            ref.invalidate(deviceInfoProvider);
+            ref.invalidate(storageAnalysisProvider);
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildStorageOverview(context, deviceAsync),
+                const SizedBox(height: 16),
+                _buildCategoriesCard(context, storageAsync),
+              ],
+            ),
           ),
         ),
       ),

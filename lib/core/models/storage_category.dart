@@ -5,7 +5,9 @@ enum StorageCategory {
   documents,
   audio,
   apks,
+  alarms,
   other,
+  permissionRequired,
 }
 
 extension StorageCategoryExtension on StorageCategory {
@@ -23,8 +25,12 @@ extension StorageCategoryExtension on StorageCategory {
         return 'Áudio';
       case StorageCategory.apks:
         return 'APKs';
+      case StorageCategory.alarms:
+        return 'Alarmes';
       case StorageCategory.other:
         return 'Outros';
+      case StorageCategory.permissionRequired:
+        return 'Permissão Necessária';
     }
   }
 }
@@ -34,12 +40,14 @@ class StorageCategoryInfo {
   final int size;
   final int count;
   final double percentage;
+  final String? message;
 
   const StorageCategoryInfo({
     required this.category,
     required this.size,
     required this.count,
     required this.percentage,
+    this.message,
   });
 
   factory StorageCategoryInfo.empty(StorageCategory cat) => StorageCategoryInfo(
@@ -71,6 +79,12 @@ class StorageCategoryInfo {
       case 'apks':
         cat = StorageCategory.apks;
         break;
+      case 'alarms':
+        cat = StorageCategory.alarms;
+        break;
+      case 'permission_required':
+        cat = StorageCategory.permissionRequired;
+        break;
       default:
         cat = StorageCategory.other;
     }
@@ -79,6 +93,7 @@ class StorageCategoryInfo {
       size: map['size'] ?? 0,
       count: map['count'] ?? 0,
       percentage: (map['percentage'] ?? 0).toDouble(),
+      message: map['message'] as String?,
     );
   }
 
@@ -87,5 +102,6 @@ class StorageCategoryInfo {
         'size': size,
         'count': count,
         'percentage': percentage,
+        if (message != null) 'message': message,
       };
 }
